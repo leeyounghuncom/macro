@@ -1,5 +1,5 @@
 import sys
-import pyautogui  # 키보드 및 마우스 시뮬레이션
+import pyautogui # 키보드 및 마우스 시뮬레이션
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QToolBar, QTableWidget,
     QMessageBox, QListWidget, QVBoxLayout, QWidget, QDialog, QComboBox, QPushButton, QLabel, QTableWidgetItem,
