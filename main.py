@@ -1,4 +1,5 @@
 import sys
+import pyautogui  # 키보드 및 마우스 시뮬레이션
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QToolBar, QTableWidget,
     QMessageBox, QListWidget, QVBoxLayout, QWidget, QDialog, QComboBox, QPushButton, QLabel, QTableWidgetItem,
@@ -9,13 +10,12 @@ from PyQt6.QtCore import QUrl, QSize
 from PyQt6.QtCore import QRegularExpression
 from PyQt6.QtGui import QRegularExpressionValidator
 
-
 class MacroRecorderApp(QMainWindow):
     def __init__(self):
         super().__init__()
 
         # 메인 윈도우 설정
-        self.setWindowTitle("이영훈닷컴 매크로")  
+        self.setWindowTitle("이영훈닷컴 매크로")
         self.setGeometry(100, 100, 800, 600)  # 창의 위치(x=100, y=100)와 크기(너비=800, 높이=600) 설정
 
         # UI 구성요소 초기화
@@ -29,7 +29,8 @@ class MacroRecorderApp(QMainWindow):
         # 툴바 액션 생성 및 추가
         self.create_actions()
         self.toolbar.addAction(self.keybaord_action)  # 키보드 액션 추가
-        self.toolbar.addAction(self.delay_action)  # 딜레이 액션 추가
+        self.toolbar.addAction(self.delay_action)  # 타임머 액션 추가
+        self.toolbar.addAction(self.run_macro_action) #매크로 실행
 
         # 중앙 테이블 위젯 설정
         self.table = QTableWidget(self)
@@ -57,7 +58,7 @@ class MacroRecorderApp(QMainWindow):
 
         # 파일 메뉴 생성 및 액션 추가
         file_menu = menubar.addMenu("파일")
-        
+
         # 새로 만들기 액션
         new_action = QAction("새로 만들기", self)
         new_action.triggered.connect(self.new_file)
@@ -85,7 +86,7 @@ class MacroRecorderApp(QMainWindow):
 
         # 도움말 메뉴 생성
         help_menu = menubar.addMenu("도움말")
-        
+
         # 정보 액션
         info_action = QAction("정보", self)
         info_action.triggered.connect(self.show_info)
@@ -112,10 +113,13 @@ class MacroRecorderApp(QMainWindow):
         self.keybaord_action.triggered.connect(self.keybaord)
         self.keybaord_action.setShortcut("F5")  # 단축키 설정
 
-        # 딜레이 액션 생성 및 설정
-        self.delay_action = QAction("딜레이", self)
+        # 타임머 액션 생성 및 설정
+        self.delay_action = QAction("타임머", self)
         self.delay_action.triggered.connect(self.delay)
         self.delay_action.setShortcut("F6")  # 단축키 설정
+
+        self.run_macro_action = QAction("매크로 실행", self)
+        self.run_macro_action.triggered.connect(self.run_macro)
 
     # 메뉴 액션 메서드들
     def new_file(self):
@@ -199,15 +203,15 @@ class MacroRecorderApp(QMainWindow):
             print(f"Error in keyboard action: {e}")
 
     def delay(self):
-        # 딜레이 명령 설정 대화상자 실행
+        # 타임머 명령 설정 대화상자 실행
         dialog = DelayCommandDialog(self)  # 대화상자 생성
         dialog.setParent(None)  # 메모리 누수 방지
         if dialog.exec() == QDialog.DialogCode.Accepted:  # 대화상자 확인 버튼 클릭 시
-            delay_value = dialog.get_delay()  # 딜레이 값 가져오기
+            delay_value = dialog.get_delay()  # 타임머 값 가져오기
             row_position = self.table.rowCount()  # 현재 테이블 행 수 가져오기
             self.table.insertRow(row_position)  # 새로운 행 삽입
             self.table.setItem(row_position, 0, QTableWidgetItem("Delay"))  # 명령 설정
-            self.table.setItem(row_position, 1, QTableWidgetItem(delay_value))  # 딜레이 값 설정
+            self.table.setItem(row_position, 1, QTableWidgetItem(delay_value))  # 타임머 값 설정
 
     def show_about_dialog(self):
         # 소개 대화 상자 생성 및 표시
@@ -222,6 +226,43 @@ class MacroRecorderApp(QMainWindow):
         msg_box.setIcon(QMessageBox.Icon.Information)  # 정보 아이콘 설정
         msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)  # 확인 버튼 설정
         msg_box.exec()  # 대화 상자 실행
+
+    def run_macro(self):
+        try:
+            # pyautogui의 기본 타임머 설정
+            pyautogui.PAUSE = 0.1  # 명령 간 기본 타임머 (초 단위)
+
+            # 테이블의 모든 행에 대해 반복
+            for row in range(self.table.rowCount()):
+                # 각 행에서 명령과 파라미터 가져오기
+                command = self._safe_item_text(row, 0)
+                param1 = self._safe_item_text(row, 1)
+                param2 = self._safe_item_text(row, 2)
+
+                # 명령이 'Keyboard'인 경우
+                if command == "Keyboard":
+                    # 키보드 입력 방식에 따라 처리
+                    if param1 == "Press":
+                        pyautogui.press(param2)  # 키를 눌러서 입력
+                    elif param1 == "KeyDown":
+                        pyautogui.keyDown(param2)  # 키를 누르고 있음
+                    elif param1 == "KeyUp":
+                        pyautogui.keyUp(param2)  # 키에서 손을 뗌
+
+                # 명령이 'Delay'인 경우
+                elif command == "Delay":
+                    delay_time = float(param1)  # 타임머 시간을 실수로 변환
+                    pyautogui.sleep(delay_time)  # 지정된 시간 동안 타임머
+
+                # GUI가 멈추지 않도록 이벤트 처리
+                QApplication.processEvents()
+
+            # 매크로 실행 완료 메시지 표시
+            QMessageBox.information(self, "매크로 실행", "매크로 실행이 완료되었습니다.")
+
+        except Exception as e:
+            # 오류 발생 시 오류 메시지 표시
+            QMessageBox.critical(self, "오류", f"매크로 실행 중 오류가 발생했습니다: {e}")
 
 
 class KeyboardCommandDialog(QDialog):
@@ -239,14 +280,28 @@ class KeyboardCommandDialog(QDialog):
         self.key_label = QLabel("키 선택:")
         self.key_combo = QComboBox(self)
         self.key_combo.addItems([  # 키 목록 추가
-            "KeyCode", "Back", "Tab", "Clear", "Return", "ShiftLeft", "ControlLeft", "ShiftRight", "ControlRight",
-            "AltLeft",
-            "AltRight", "Space", "Left", "Up", "Right", "Down", "Print", "Insert", "Delete", "End", "Home", "PageUP",
-            "PageDown",
-            "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u",
-            "v", "w", "x", "y", "z",
-            "LWindows", "RWindows",
-            "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"])
+            "KeyCode", '\\t', '\\n', '\\r', ' ', '!', '"', '#', '$', '%', '&', "'", '(',
+')', '*', '+', ',', '-', '.', '/', '0', '1', '2', '3', '4', '5', '6', '7',
+'8', '9', ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`',
+'a', 'b', 'c', 'd', 'e','f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o',
+'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}', '~',
+'accept', 'add', 'alt', 'altleft', 'altright', 'apps', 'backspace',
+'browserback', 'browserfavorites', 'browserforward', 'browserhome',
+'browserrefresh', 'browsersearch', 'browserstop', 'capslock', 'clear',
+'convert', 'ctrl', 'ctrlleft', 'ctrlright', 'decimal', 'del', 'delete',
+'divide', 'down', 'end', 'enter', 'esc', 'escape', 'execute', 'f1', 'f10',
+'f11', 'f12', 'f13', 'f14', 'f15', 'f16', 'f17', 'f18', 'f19', 'f2', 'f20',
+'f21', 'f22', 'f23', 'f24', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9',
+'final', 'fn', 'hanguel', 'hangul', 'hanja', 'help', 'home', 'insert', 'junja',
+'kana', 'kanji', 'launchapp1', 'launchapp2', 'launchmail',
+'launchmediaselect', 'left', 'modechange', 'multiply', 'nexttrack',
+'nonconvert', 'num0', 'num1', 'num2', 'num3', 'num4', 'num5', 'num6',
+'num7', 'num8', 'num9', 'numlock', 'pagedown', 'pageup', 'pause', 'pgdn',
+'pgup', 'playpause', 'prevtrack', 'print', 'printscreen', 'prntscrn',
+'prtsc', 'prtscr', 'return', 'right', 'scrolllock', 'select', 'separator',
+'shift', 'shiftleft', 'shiftright', 'sleep', 'space', 'stop', 'subtract', 'tab',
+'up', 'volumedown', 'volumemute', 'volumeup', 'win', 'winleft', 'winright', 'yen',
+'command', 'option', 'optionleft', 'optionright'])
 
         self.keycode_input_label = QLabel("KeyCode 값:")
         self.keycode_input = QLineEdit(self)
@@ -288,10 +343,11 @@ class KeyboardCommandDialog(QDialog):
         keycode = self.keycode_input.text()  # KeyCode 값
         return event_type, key, keycode
 
+
 class DelayCommandDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("딜레이 설정")  # 대화상자 제목 설정
+        self.setWindowTitle("타임머 설정")  # 대화상자 제목 설정
         self.setGeometry(200, 200, 300, 150)  # 대화상자 크기 설정
 
         # 레이아웃 설정
@@ -306,15 +362,15 @@ class DelayCommandDialog(QDialog):
         self.ok_button = QPushButton("OK", self)
         self.ok_button.clicked.connect(self.accept)
 
-
         # 레이아웃에 위젯 추가
         layout.addWidget(self.milliseconds_label)
         layout.addWidget(self.milliseconds_input)
         layout.addWidget(self.ok_button)
 
     def get_delay(self):
-        # 입력된 딜레이 값 반환
+        # 입력된 타임머 값 반환
         return self.milliseconds_input.text()
+
 
 if __name__ == "__main__":
     # 애플리케이션 실행
